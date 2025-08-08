@@ -14,7 +14,10 @@ LLM-based:
 
 ibm-granite/granite-speech-3.3-8b:
 
-microsoft/Phi-4-multimodal-instruct:
+microsoft/Phi-4-multimodal-instruct: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-phi4
+
+microsoft/Phi-4-multimodal-instruct Ablation No Lora: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-phi4-no-lora
+
 
 nvidia/canary-qwen-2.5b:
 
