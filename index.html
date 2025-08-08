@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Side-by-Side JSONL Probability Visualizer</title>
+<title>Combined Sentence with Side-by-Side Candidates</title>
 <style>
   body { font-family: Arial, sans-serif; padding: 20px; }
   .audio-id-btn {
@@ -21,28 +21,11 @@
     background-color: #4285f4;
     color: white;
   }
-  #container {
-    display: flex;
-    gap: 30px;
-    flex-wrap: wrap;
-  }
-  .panel {
-    flex: 1 1 45%;
-    min-width: 300px;
-  }
-  h2 {
-    margin-bottom: 10px;
-    color: #1a73e8;
-  }
-  #sentence-whisper, #sentence-phi4 {
+  #sentence {
     margin-bottom: 20px;
-    max-width: 100%;
+    max-width: 90vw;
     word-wrap: break-word;
-    font-size: 1.3rem;
-    border: 1px solid #ccc;
-    padding: 12px;
-    border-radius: 8px;
-    min-height: 60px;
+    font-size: 1.4rem; /* larger font */
   }
   .word {
     cursor: pointer;
@@ -57,16 +40,23 @@
   .selected {
     background-color: #a0d3ff;
   }
-  #prob-whisper, #prob-phi4 {
-    max-width: 100%;
+  #candidates-container {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    max-width: 900px;
+  }
+  .candidates-panel {
+    flex: 1 1 45%;
     border: 1px solid #ccc;
     padding: 12px;
     border-radius: 8px;
     white-space: normal;
-    min-height: 100px;
+    min-height: 150px;
   }
-  #prob-whisper h3, #prob-phi4 h3 {
+  .candidates-panel h3 {
     margin-top: 0;
+    color: #1a73e8;
   }
   .candidate {
     margin: 2px 0;
@@ -81,40 +71,38 @@
     margin-left: 6px;
     vertical-align: middle;
   }
-  .placeholder {
+  .no-data {
     font-style: italic;
     color: #999;
-    padding: 3px 6px;
-    margin-right: 4px;
   }
 </style>
 </head>
 <body>
 
-<h1>Side-by-Side JSONL Probability Visualizer</h1>
+<h1>Combined Sentence with Side-by-Side Candidates</h1>
 
 <div id="audioIdButtons"></div>
 
-<div id="container">
-  <div class="panel" id="whisper-panel">
-    <h2>whisper-large-v3.jsonl</h2>
-    <div id="sentence-whisper">Loading...</div>
-    <div id="prob-whisper"><em>Click a word above to see candidate probabilities here.</em></div>
+<div id="sentence">Loading data...</div>
+
+<div id="candidates-container">
+  <div class="candidates-panel" id="candidates-whisper">
+    <h3>whisper-large-v3.jsonl Candidates</h3>
+    <div><em>Click a word above to see candidates here.</em></div>
   </div>
-  <div class="panel" id="phi4-panel">
-    <h2>phi4.jsonl</h2>
-    <div id="sentence-phi4">Loading...</div>
-    <div id="prob-phi4"><em>Click a word above to see candidate probabilities here.</em></div>
+  <div class="candidates-panel" id="candidates-phi4">
+    <h3>phi4.jsonl Candidates</h3>
+    <div><em>Click a word above to see candidates here.</em></div>
   </div>
 </div>
 
 <script>
 const FILES = [
   {name: "whisper-large-v3.jsonl", shortName: "whisper-large-v3"},
-  {name: "phi4-multimodal.jsonl", shortName: "phi4"},
+  {name: "phi4.jsonl", shortName: "phi4"},
 ];
 
-// Store data maps by audio_id for each file
+// Data maps keyed by audio_id, each is array of word entries sorted by target_id
 const dataMaps = {
   "whisper-large-v3": new Map(),
   "phi4": new Map()
@@ -148,8 +136,7 @@ function fetchFile(fileInfo) {
 Promise.all(FILES.map(fetchFile))
   .then(() => {
     if (audioIdsSet.size === 0) {
-      document.getElementById("sentence-whisper").textContent = "No valid data found.";
-      document.getElementById("sentence-phi4").textContent = "No valid data found.";
+      document.getElementById("sentence").textContent = "No valid data found.";
       return;
     }
     const audioIds = Array.from(audioIdsSet).sort();
@@ -157,11 +144,10 @@ Promise.all(FILES.map(fetchFile))
     renderAudioIdButtons(audioIds);
 
     // Show first audio id by default
-    renderSentencesForAudioId(audioIds[0]);
+    renderSentence(audioIds[0]);
   })
   .catch(err => {
-    document.getElementById("sentence-whisper").textContent = "Error loading data: " + err.message;
-    document.getElementById("sentence-phi4").textContent = "Error loading data: " + err.message;
+    document.getElementById("sentence").textContent = "Error loading data: " + err.message;
   });
 
 function renderAudioIdButtons(audioIds) {
@@ -175,112 +161,105 @@ function renderAudioIdButtons(audioIds) {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".audio-id-btn").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
-      renderSentencesForAudioId(id);
+      renderSentence(id);
     });
     container.appendChild(btn);
   });
 }
 
-function renderSentencesForAudioId(audioId) {
-  renderSentenceSideBySide(
-    dataMaps["whisper-large-v3"].get(audioId) || [],
-    dataMaps["phi4"].get(audioId) || [],
-    audioId
-  );
-}
+function renderSentence(audioId) {
+  // Get both arrays, or empty array if missing
+  const arrWhisper = dataMaps["whisper-large-v3"].get(audioId) || [];
+  const arrPhi4 = dataMaps["phi4"].get(audioId) || [];
 
-function renderSentenceSideBySide(dataA, dataB, audioId) {
-  // Sort by target_id
-  dataA.sort((a,b) => a.target_id - b.target_id);
-  dataB.sort((a,b) => a.target_id - b.target_id);
+  // Build map by target_id for quick lookup
+  const mapWhisper = new Map(arrWhisper.map(d => [d.target_id, d]));
+  const mapPhi4 = new Map(arrPhi4.map(d => [d.target_id, d]));
 
-  // Build lookup maps for quick target_id access
-  const mapA = new Map(dataA.map(d => [d.target_id, d]));
-  const mapB = new Map(dataB.map(d => [d.target_id, d]));
+  // Get union of target_ids
+  const allTargetIds = Array.from(new Set([...mapWhisper.keys(), ...mapPhi4.keys()])).sort((a,b) => a-b);
 
-  // Get union of target_ids (word positions)
-  const allTargetIds = Array.from(new Set([...mapA.keys(), ...mapB.keys()])).sort((x,y) => x-y);
+  const sentenceDiv = document.getElementById("sentence");
+  const candWhisperDiv = document.getElementById("candidates-whisper");
+  const candPhi4Div = document.getElementById("candidates-phi4");
 
-  const sentenceDivA = document.getElementById("sentence-whisper");
-  const sentenceDivB = document.getElementById("sentence-phi4");
-  const probDivA = document.getElementById("prob-whisper");
-  const probDivB = document.getElementById("prob-phi4");
+  sentenceDiv.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
 
-  sentenceDivA.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
-  sentenceDivB.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
-  probDivA.innerHTML = `<em>Click a word above to see candidate probabilities here.</em>`;
-  probDivB.innerHTML = `<em>Click a word above to see candidate probabilities here.</em>`;
-
-  function makeWordSpan(wordData, fileShortName) {
+  allTargetIds.forEach(tid => {
+    // Prefer whisper if available, else phi4
+    let wordData = mapWhisper.get(tid) || mapPhi4.get(tid);
+    if (!wordData) {
+      // unlikely, but just skip word if missing in both
+      return;
+    }
     const span = document.createElement("span");
     span.textContent = wordData.target_text + " ";
     span.className = "word";
     span.title = `Click to see candidates for "${wordData.target_text.trim()}"`;
 
     span.addEventListener("click", () => {
-      // Remove previous selected in this panel only
-      const containerId = fileShortName === "whisper-large-v3" ? "sentence-whisper" : "sentence-phi4";
-      document.querySelectorAll(`#${containerId} .word`).forEach(w => w.classList.remove("selected"));
+      // Remove previously selected word
+      document.querySelectorAll("#sentence .word").forEach(w => w.classList.remove("selected"));
       span.classList.add("selected");
 
-      // Update probabilities panel for the correct file
-      const probDiv = fileShortName === "whisper-large-v3" ? probDivA : probDivB;
-
-      probDiv.innerHTML = `<h3>${fileShortName} — Candidates for word <em>"${wordData.target_text.trim()}"</em> (position ${wordData.target_id}):</h3>`;
-
-      const sortedCandidates = Object.entries(wordData.candidates)
-        .filter(([cand]) => cand.trim() !== "")
-        .sort((a,b) => b[1] - a[1]);
-
-      const maxProb = sortedCandidates.length > 0 ? sortedCandidates[0][1] : 1;
-
-      sortedCandidates.forEach(([candidate, prob]) => {
-        const candDiv = document.createElement("div");
-        candDiv.className = "candidate";
-        const bar = document.createElement("span");
-        bar.className = "candidate-bar";
-        bar.style.width = `${(prob / maxProb) * 200}px`;
-        candDiv.appendChild(bar);
-
-        const textSpan = document.createElement("span");
-        textSpan.className = "candidate-text";
-        textSpan.textContent = `${candidate} : ${(prob*100).toFixed(2)}%`;
-        candDiv.appendChild(textSpan);
-
-        probDiv.appendChild(candDiv);
-      });
-
-      if(sortedCandidates.length === 0) {
-        probDiv.innerHTML += "<p>No candidate probabilities available.</p>";
-      }
+      // Show candidates side-by-side
+      showCandidatesForTargetId(audioId, tid);
     });
 
-    return span;
+    sentenceDiv.appendChild(span);
+  });
+
+  candWhisperDiv.querySelector("div")?.remove();
+  candPhi4Div.querySelector("div")?.remove();
+
+  candWhisperDiv.innerHTML = `<h3>whisper-large-v3.jsonl Candidates</h3><em>Click a word above to see candidates here.</em>`;
+  candPhi4Div.innerHTML = `<h3>phi4.jsonl Candidates</h3><em>Click a word above to see candidates here.</em>`;
+}
+
+function showCandidatesForTargetId(audioId, targetId) {
+  const candWhisperDiv = document.getElementById("candidates-whisper");
+  const candPhi4Div = document.getElementById("candidates-phi4");
+
+  const whisperEntry = (dataMaps["whisper-large-v3"].get(audioId) || []).find(d => d.target_id === targetId);
+  const phi4Entry = (dataMaps["phi4"].get(audioId) || []).find(d => d.target_id === targetId);
+
+  function renderCandidates(entry, container) {
+    container.innerHTML = ""; // clear
+    if (!entry) {
+      container.innerHTML = `<h3>${container.id === "candidates-whisper" ? "whisper-large-v3.jsonl" : "phi4.jsonl"} Candidates</h3><p class="no-data">No data for this word.</p>`;
+      return;
+    }
+    container.innerHTML = `<h3>${container.id === "candidates-whisper" ? "whisper-large-v3.jsonl" : "phi4.jsonl"} — Candidates for word <em>"${entry.target_text.trim()}"</em> (position ${entry.target_id}):</h3>`;
+
+    const sortedCandidates = Object.entries(entry.candidates)
+      .filter(([cand]) => cand.trim() !== "")
+      .sort((a,b) => b[1] - a[1]);
+
+    const maxProb = sortedCandidates.length > 0 ? sortedCandidates[0][1] : 1;
+
+    sortedCandidates.forEach(([candidate, prob]) => {
+      const candDiv = document.createElement("div");
+      candDiv.className = "candidate";
+      const bar = document.createElement("span");
+      bar.className = "candidate-bar";
+      bar.style.width = `${(prob / maxProb) * 200}px`;
+      candDiv.appendChild(bar);
+
+      const textSpan = document.createElement("span");
+      textSpan.className = "candidate-text";
+      textSpan.textContent = `${candidate} : ${(prob*100).toFixed(2)}%`;
+      candDiv.appendChild(textSpan);
+
+      container.appendChild(candDiv);
+    });
+
+    if(sortedCandidates.length === 0) {
+      container.innerHTML += "<p>No candidate probabilities available.</p>";
+    }
   }
 
-  // Render whisper panel sentence
-  allTargetIds.forEach(tid => {
-    if (mapA.has(tid)) {
-      sentenceDivA.appendChild(makeWordSpan(mapA.get(tid), "whisper-large-v3"));
-    } else {
-      const placeholder = document.createElement("span");
-      placeholder.textContent = "[missing] ";
-      placeholder.className = "placeholder";
-      sentenceDivA.appendChild(placeholder);
-    }
-  });
-
-  // Render phi4 panel sentence
-  allTargetIds.forEach(tid => {
-    if (mapB.has(tid)) {
-      sentenceDivB.appendChild(makeWordSpan(mapB.get(tid), "phi4"));
-    } else {
-      const placeholder = document.createElement("span");
-      placeholder.textContent = "[missing] ";
-      placeholder.className = "placeholder";
-      sentenceDivB.appendChild(placeholder);
-    }
-  });
+  renderCandidates(whisperEntry, candWhisperDiv);
+  renderCandidates(phi4Entry, candPhi4Div);
 }
 </script>
 
