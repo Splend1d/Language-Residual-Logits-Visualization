@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JSONL Probability Visualizer with GitHub Data</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; }
+  .word {
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-right: 4px;
+    user-select: none;
+  }
+  .word:hover {
+    background-color: #ddd;
+  }
+  .selected {
+    background-color: #a0d3ff;
+  }
+  #sentence {
+    margin-bottom: 20px;
+    max-width: 90vw;
+    word-wrap: break-word;
+  }
+  #probabilities {
+    max-width: 600px;
+    border: 1px solid #ccc;
+    padding: 12px;
+    border-radius: 8px;
+    white-space: normal;
+  }
+  #probabilities h3 {
+    margin-top: 0;
+  }
+  .candidate {
+    margin: 2px 0;
+  }
+  .candidate-bar {
+    display: inline-block;
+    height: 14px;
+    background-color: #4285f4;
+    vertical-align: middle;
+  }
+  .candidate-text {
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<h1>JSONL Probability Visualizer (Auto-loaded from GitHub)</h1>
+
+<div id="sentence">Loading data...</div>
+
+<div id="probabilities"><em>Click a word above to see candidate probabilities here.</em></div>
+
+<script>
+// URL of your JSONL file relative to this HTML file (adjust if needed)
+const DATA_URL = "data.jsonl";
+
+const audioDataMap = new Map();
+
+fetch(DATA_URL)
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return res.text();
+  })
+  .then(text => {
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
+
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line);
+        const id = obj.audio_id;
+        if (!audioDataMap.has(id)) audioDataMap.set(id, []);
+        audioDataMap.get(id).push(obj);
+      } catch (ex) {
+        console.warn("Skipping invalid JSON line:", line);
+      }
+    }
+
+    const firstAudioId = audioDataMap.keys().next().value;
+    if (!firstAudioId) {
+      document.getElementById("sentence").textContent = "No valid data found.";
+      return;
+    }
+
+    renderSentence(audioDataMap.get(firstAudioId), firstAudioId);
+  })
+  .catch(err => {
+    document.getElementById("sentence").textContent = "Error loading data: " + err.message;
+  });
+
+function renderSentence(dataArray, audioId) {
+  dataArray.sort((a,b) => a.target_id - b.target_id);
+
+  const sentenceDiv = document.getElementById("sentence");
+  const probDiv = document.getElementById("probabilities");
+
+  sentenceDiv.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
+
+  dataArray.forEach(wordData => {
+    const span = document.createElement("span");
+    span.textContent = wordData.target_text + " ";
+    span.className = "word";
+    span.title = `Click to see candidates for "${wordData.target_text.trim()}"`;
+
+    span.addEventListener("click", () => {
+      document.querySelectorAll(".word").forEach(w => w.classList.remove("selected"));
+      span.classList.add("selected");
+
+      probDiv.innerHTML = `<h3>Candidates for word <em>"${wordData.target_text.trim()}"</em> (position ${wordData.target_id}):</h3>`;
+
+      const sortedCandidates = Object.entries(wordData.candidates)
+        .filter(([cand]) => cand.trim() !== "")
+        .sort((a,b) => b[1] - a[1]);
+
+      const maxProb = sortedCandidates.length > 0 ? sortedCandidates[0][1] : 1;
+
+      sortedCandidates.forEach(([candidate, prob]) => {
+        const candDiv = document.createElement("div");
+        candDiv.className = "candidate";
+        const bar = document.createElement("span");
+        bar.className = "candidate-bar";
+        bar.style.width = `${(prob / maxProb) * 200}px`;
+        candDiv.appendChild(bar);
+
+        const textSpan = document.createElement("span");
+        textSpan.className = "candidate-text";
+        textSpan.textContent = `${candidate} : ${(prob*100).toFixed(2)}%`;
+        candDiv.appendChild(textSpan);
+
+        probDiv.appendChild(candDiv);
+      });
+
+      if(sortedCandidates.length === 0) {
+        probDiv.innerHTML += "<p>No candidate probabilities available.</p>";
+      }
+    });
+
+    sentenceDiv.appendChild(span);
+  });
+
+  probDiv.innerHTML = "<em>Click a word above to see candidate probabilities here.</em>";
+}
+</script>
+
+</body>
+</html>
