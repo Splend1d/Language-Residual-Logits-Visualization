@@ -4,7 +4,7 @@
 
 non-LLM-based:
 
-openai/whisper-large-v3:
+openai/whisper-large-v3: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-whisper 50 samples finished in 3h 47m 44s 
 
 nvidia/parakeet-tdt-0.6b-v2:
 
