@@ -12,7 +12,7 @@ nvidia/canary-1b-flash:
 
 LLM-based:
 
-ibm-granite/granite-speech-3.3-8b:
+ibm-granite/granite-speech-3.3-8b: https://www.kaggle.com/code/xooldude/lrlv-get-next-word-logits-granite/
 
 microsoft/Phi-4-multimodal-instruct: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-phi4
 
@@ -20,5 +20,6 @@ microsoft/Phi-4-multimodal-instruct Ablation No Lora: https://www.kaggle.com/cod
 
 
 nvidia/canary-qwen-2.5b:
+
 
 
