@@ -3,9 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JSONL Probability Visualizer with GitHub Data</title>
+<title>JSONL Probability Visualizer with Audio ID Buttons</title>
 <style>
   body { font-family: Arial, sans-serif; padding: 20px; }
+  .audio-id-btn {
+    margin: 3px 4px 10px 0;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1.5px solid #4285f4;
+    background-color: white;
+    color: #4285f4;
+    font-weight: 600;
+    user-select: none;
+  }
+  .audio-id-btn.selected {
+    background-color: #4285f4;
+    color: white;
+  }
+  #sentence {
+    margin-bottom: 20px;
+    max-width: 90vw;
+    word-wrap: break-word;
+    font-size: 1.4rem; /* larger font */
+  }
   .word {
     cursor: pointer;
     padding: 3px 6px;
@@ -18,11 +39,6 @@
   }
   .selected {
     background-color: #a0d3ff;
-  }
-  #sentence {
-    margin-bottom: 20px;
-    max-width: 90vw;
-    word-wrap: break-word;
   }
   #probabilities {
     max-width: 600px;
@@ -51,15 +67,17 @@
 </head>
 <body>
 
-<h1>JSONL Probability Visualizer (Auto-loaded from GitHub)</h1>
+<h1>JSONL Probability Visualizer</h1>
+
+<div id="audioIdButtons"></div>
 
 <div id="sentence">Loading data...</div>
 
 <div id="probabilities"><em>Click a word above to see candidate probabilities here.</em></div>
 
 <script>
-// URL of your JSONL file relative to this HTML file (adjust if needed)
 const DATA_URL = "data.jsonl";
+const DATA_NAME = "data"; // <-- JSONL filename without extension, to show in title
 
 const audioDataMap = new Map();
 
@@ -82,17 +100,38 @@ fetch(DATA_URL)
       }
     }
 
-    const firstAudioId = audioDataMap.keys().next().value;
-    if (!firstAudioId) {
+    if (audioDataMap.size === 0) {
       document.getElementById("sentence").textContent = "No valid data found.";
       return;
     }
 
-    renderSentence(audioDataMap.get(firstAudioId), firstAudioId);
+    renderAudioIdButtons([...audioDataMap.keys()]);
+
+    // Show first audio_id by default
+    renderSentence(audioDataMap.values().next().value, audioDataMap.keys().next().value);
   })
   .catch(err => {
     document.getElementById("sentence").textContent = "Error loading data: " + err.message;
   });
+
+function renderAudioIdButtons(audioIds) {
+  const container = document.getElementById("audioIdButtons");
+  container.innerHTML = "";
+  audioIds.forEach((id, idx) => {
+    const btn = document.createElement("button");
+    btn.textContent = id;
+    btn.className = "audio-id-btn";
+    if (idx === 0) btn.classList.add("selected");
+    btn.addEventListener("click", () => {
+      // update selection style
+      document.querySelectorAll(".audio-id-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+
+      renderSentence(audioDataMap.get(id), id);
+    });
+    container.appendChild(btn);
+  });
+}
 
 function renderSentence(dataArray, audioId) {
   dataArray.sort((a,b) => a.target_id - b.target_id);
@@ -112,7 +151,7 @@ function renderSentence(dataArray, audioId) {
       document.querySelectorAll(".word").forEach(w => w.classList.remove("selected"));
       span.classList.add("selected");
 
-      probDiv.innerHTML = `<h3>Candidates for word <em>"${wordData.target_text.trim()}"</em> (position ${wordData.target_id}):</h3>`;
+      probDiv.innerHTML = `<h3>Data "${DATA_NAME}" — Candidates for word <em>"${wordData.target_text.trim()}"</em> (position ${wordData.target_id}):</h3>`;
 
       const sortedCandidates = Object.entries(wordData.candidates)
         .filter(([cand]) => cand.trim() !== "")
