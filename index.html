@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JSONL Probability Visualizer with Audio ID Buttons</title>
+<title>Side-by-Side JSONL Probability Visualizer</title>
 <style>
   body { font-family: Arial, sans-serif; padding: 20px; }
   .audio-id-btn {
@@ -21,11 +21,28 @@
     background-color: #4285f4;
     color: white;
   }
-  #sentence {
+  #container {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+  .panel {
+    flex: 1 1 45%;
+    min-width: 300px;
+  }
+  h2 {
+    margin-bottom: 10px;
+    color: #1a73e8;
+  }
+  #sentence-whisper, #sentence-phi4 {
     margin-bottom: 20px;
-    max-width: 90vw;
+    max-width: 100%;
     word-wrap: break-word;
-    font-size: 1.4rem; /* larger font */
+    font-size: 1.3rem;
+    border: 1px solid #ccc;
+    padding: 12px;
+    border-radius: 8px;
+    min-height: 60px;
   }
   .word {
     cursor: pointer;
@@ -40,14 +57,15 @@
   .selected {
     background-color: #a0d3ff;
   }
-  #probabilities {
-    max-width: 600px;
+  #prob-whisper, #prob-phi4 {
+    max-width: 100%;
     border: 1px solid #ccc;
     padding: 12px;
     border-radius: 8px;
     white-space: normal;
+    min-height: 100px;
   }
-  #probabilities h3 {
+  #prob-whisper h3, #prob-phi4 h3 {
     margin-top: 0;
   }
   .candidate {
@@ -63,55 +81,87 @@
     margin-left: 6px;
     vertical-align: middle;
   }
+  .placeholder {
+    font-style: italic;
+    color: #999;
+    padding: 3px 6px;
+    margin-right: 4px;
+  }
 </style>
 </head>
 <body>
 
-<h1>JSONL Probability Visualizer</h1>
+<h1>Side-by-Side JSONL Probability Visualizer</h1>
 
 <div id="audioIdButtons"></div>
 
-<div id="sentence">Loading data...</div>
-
-<div id="probabilities"><em>Click a word above to see candidate probabilities here.</em></div>
+<div id="container">
+  <div class="panel" id="whisper-panel">
+    <h2>whisper-large-v3.jsonl</h2>
+    <div id="sentence-whisper">Loading...</div>
+    <div id="prob-whisper"><em>Click a word above to see candidate probabilities here.</em></div>
+  </div>
+  <div class="panel" id="phi4-panel">
+    <h2>phi4.jsonl</h2>
+    <div id="sentence-phi4">Loading...</div>
+    <div id="prob-phi4"><em>Click a word above to see candidate probabilities here.</em></div>
+  </div>
+</div>
 
 <script>
-const DATA_URL = "data.jsonl";
-const DATA_NAME = "data"; // <-- JSONL filename without extension, to show in title
+const FILES = [
+  {name: "whisper-large-v3.jsonl", shortName: "whisper-large-v3"},
+  {name: "phi4.jsonl", shortName: "phi4"},
+];
 
-const audioDataMap = new Map();
+// Store data maps by audio_id for each file
+const dataMaps = {
+  "whisper-large-v3": new Map(),
+  "phi4": new Map()
+};
 
-fetch(DATA_URL)
-  .then(res => {
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    return res.text();
-  })
-  .then(text => {
-    const lines = text.split('\n').filter(l => l.trim().length > 0);
+const audioIdsSet = new Set();
 
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line);
-        const id = obj.audio_id;
-        if (!audioDataMap.has(id)) audioDataMap.set(id, []);
-        audioDataMap.get(id).push(obj);
-      } catch (ex) {
-        console.warn("Skipping invalid JSON line:", line);
-      }
-    }
+function fetchFile(fileInfo) {
+  return fetch(fileInfo.name)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP error ${res.status} for ${fileInfo.name}`);
+      return res.text();
+    })
+    .then(text => {
+      const lines = text.split('\n').filter(l => l.trim());
+      lines.forEach(line => {
+        try {
+          const obj = JSON.parse(line);
+          const id = obj.audio_id;
+          audioIdsSet.add(id);
+          if (!dataMaps[fileInfo.shortName].has(id))
+            dataMaps[fileInfo.shortName].set(id, []);
+          dataMaps[fileInfo.shortName].get(id).push(obj);
+        } catch(e) {
+          console.warn(`Skipping invalid JSON in ${fileInfo.name}:`, line);
+        }
+      });
+    });
+}
 
-    if (audioDataMap.size === 0) {
-      document.getElementById("sentence").textContent = "No valid data found.";
+Promise.all(FILES.map(fetchFile))
+  .then(() => {
+    if (audioIdsSet.size === 0) {
+      document.getElementById("sentence-whisper").textContent = "No valid data found.";
+      document.getElementById("sentence-phi4").textContent = "No valid data found.";
       return;
     }
+    const audioIds = Array.from(audioIdsSet).sort();
 
-    renderAudioIdButtons([...audioDataMap.keys()]);
+    renderAudioIdButtons(audioIds);
 
-    // Show first audio_id by default
-    renderSentence(audioDataMap.values().next().value, audioDataMap.keys().next().value);
+    // Show first audio id by default
+    renderSentencesForAudioId(audioIds[0]);
   })
   .catch(err => {
-    document.getElementById("sentence").textContent = "Error loading data: " + err.message;
+    document.getElementById("sentence-whisper").textContent = "Error loading data: " + err.message;
+    document.getElementById("sentence-phi4").textContent = "Error loading data: " + err.message;
   });
 
 function renderAudioIdButtons(audioIds) {
@@ -123,35 +173,60 @@ function renderAudioIdButtons(audioIds) {
     btn.className = "audio-id-btn";
     if (idx === 0) btn.classList.add("selected");
     btn.addEventListener("click", () => {
-      // update selection style
       document.querySelectorAll(".audio-id-btn").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
-
-      renderSentence(audioDataMap.get(id), id);
+      renderSentencesForAudioId(id);
     });
     container.appendChild(btn);
   });
 }
 
-function renderSentence(dataArray, audioId) {
-  dataArray.sort((a,b) => a.target_id - b.target_id);
+function renderSentencesForAudioId(audioId) {
+  renderSentenceSideBySide(
+    dataMaps["whisper-large-v3"].get(audioId) || [],
+    dataMaps["phi4"].get(audioId) || [],
+    audioId
+  );
+}
 
-  const sentenceDiv = document.getElementById("sentence");
-  const probDiv = document.getElementById("probabilities");
+function renderSentenceSideBySide(dataA, dataB, audioId) {
+  // Sort by target_id
+  dataA.sort((a,b) => a.target_id - b.target_id);
+  dataB.sort((a,b) => a.target_id - b.target_id);
 
-  sentenceDiv.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
+  // Build lookup maps for quick target_id access
+  const mapA = new Map(dataA.map(d => [d.target_id, d]));
+  const mapB = new Map(dataB.map(d => [d.target_id, d]));
 
-  dataArray.forEach(wordData => {
+  // Get union of target_ids (word positions)
+  const allTargetIds = Array.from(new Set([...mapA.keys(), ...mapB.keys()])).sort((x,y) => x-y);
+
+  const sentenceDivA = document.getElementById("sentence-whisper");
+  const sentenceDivB = document.getElementById("sentence-phi4");
+  const probDivA = document.getElementById("prob-whisper");
+  const probDivB = document.getElementById("prob-phi4");
+
+  sentenceDivA.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
+  sentenceDivB.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
+  probDivA.innerHTML = `<em>Click a word above to see candidate probabilities here.</em>`;
+  probDivB.innerHTML = `<em>Click a word above to see candidate probabilities here.</em>`;
+
+  function makeWordSpan(wordData, fileShortName) {
     const span = document.createElement("span");
     span.textContent = wordData.target_text + " ";
     span.className = "word";
     span.title = `Click to see candidates for "${wordData.target_text.trim()}"`;
 
     span.addEventListener("click", () => {
-      document.querySelectorAll(".word").forEach(w => w.classList.remove("selected"));
+      // Remove previous selected in this panel only
+      const containerId = fileShortName === "whisper-large-v3" ? "sentence-whisper" : "sentence-phi4";
+      document.querySelectorAll(`#${containerId} .word`).forEach(w => w.classList.remove("selected"));
       span.classList.add("selected");
 
-      probDiv.innerHTML = `<h3>Data "${DATA_NAME}" — Candidates for word <em>"${wordData.target_text.trim()}"</em> (position ${wordData.target_id}):</h3>`;
+      // Update probabilities panel for the correct file
+      const probDiv = fileShortName === "whisper-large-v3" ? probDivA : probDivB;
+
+      probDiv.innerHTML = `<h3>${fileShortName} — Candidates for word <em>"${wordData.target_text.trim()}"</em> (position ${wordData.target_id}):</h3>`;
 
       const sortedCandidates = Object.entries(wordData.candidates)
         .filter(([cand]) => cand.trim() !== "")
@@ -180,10 +255,32 @@ function renderSentence(dataArray, audioId) {
       }
     });
 
-    sentenceDiv.appendChild(span);
+    return span;
+  }
+
+  // Render whisper panel sentence
+  allTargetIds.forEach(tid => {
+    if (mapA.has(tid)) {
+      sentenceDivA.appendChild(makeWordSpan(mapA.get(tid), "whisper-large-v3"));
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.textContent = "[missing] ";
+      placeholder.className = "placeholder";
+      sentenceDivA.appendChild(placeholder);
+    }
   });
 
-  probDiv.innerHTML = "<em>Click a word above to see candidate probabilities here.</em>";
+  // Render phi4 panel sentence
+  allTargetIds.forEach(tid => {
+    if (mapB.has(tid)) {
+      sentenceDivB.appendChild(makeWordSpan(mapB.get(tid), "phi4"));
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.textContent = "[missing] ";
+      placeholder.className = "placeholder";
+      sentenceDivB.appendChild(placeholder);
+    }
+  });
 }
 </script>
 
