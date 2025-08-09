@@ -263,8 +263,13 @@ function renderCandidatePanels(audioId, targetId, wordText) {
     }
 
     const candidates = Object.entries(entry.candidates || {})
-        .filter(([cand]) => (cand ?? '').trim() !== '')
-        .sort((a,b) => b[1] - a[1]);
+    .map(([cand, prob]) => {
+        const token = (cand ?? '').trim() === '' ? 'NULL' : cand;
+        return [token, prob];
+    })
+    .sort((a, b) => b[1] - a[1]);
+
+
     if (!candidates.length) {
         panel.innerHTML += `<div class="no-data">No candidate probabilities available.</div>`;
         return;
