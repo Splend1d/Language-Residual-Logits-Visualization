@@ -81,9 +81,11 @@ const PATH_SEGMENTS = location.pathname.replace(/^\/+|\/+$/g,'').split('/');
 const OWNER = REPO_GH_IO ? location.hostname.split('.')[0] : null;   // e.g., splend1d
 const REPO  = REPO_GH_IO ? (PATH_SEGMENTS[0] || '') : '';            // e.g., Language-Residual-Logits-Visualization
 
+// Set the JSONL whose order we follow
+const ORDER_SOURCE = 'whisper-large-v3.jsonl';
+
 // Manifest fallback for custom domains or API limits: assets/manifest.json -> ["file1.jsonl","file2.jsonl"]
 async function listJsonlAssets() {
-    // Try GitHub API first (works best on *.github.io)
     if (OWNER && REPO) {
     try {
         const api = `https://api.github.com/repos/${OWNER}/${REPO}/contents/assets`;
@@ -100,7 +102,6 @@ async function listJsonlAssets() {
         console.warn('GitHub API listing failed, will try manifest:', e);
     }
     }
-    // Fallback: local manifest
     try {
     const m = await fetch('assets/manifest.json', { cache: 'no-store' });
     if (m.ok) {
@@ -110,7 +111,6 @@ async function listJsonlAssets() {
     } catch (e) {
     console.warn('Manifest not found or invalid:', e);
     }
-    // Last resort: nothing
     return [];
 }
 
@@ -124,7 +124,7 @@ async function listJsonlAssets() {
 const modelsData = {};
 let modelOrder = []; // array of modelNames (from filenames sans .jsonl)
 let allAudioIds = new Set();
-// NEW: preserve the appearance order of audio IDs from the first JSONL file
+// Preserve the appearance order of audio IDs from ORDER_SOURCE
 const audioIdOrder = [];
 
 // ---------- Load & parse ----------
@@ -136,10 +136,16 @@ async function loadAll() {
     }
 
     modelOrder = files.map(n => n.replace(/\.jsonl$/i, ''));
+
+    // Normalize for comparison
+    const orderSourceLower = ORDER_SOURCE.toLowerCase();
+    let sawOrderSource = false;
+
     for (let fi = 0; fi < files.length; fi++) {
     const file = files[fi];
     const modelName = file.replace(/\.jsonl$/i, '');
     modelsData[modelName] = new Map();
+
     const res = await fetch(`assets/${file}`, { cache: 'no-store' });
     if (!res.ok) {
         console.warn('Failed to fetch', file, res.status);
@@ -148,9 +154,10 @@ async function loadAll() {
     const text = await res.text();
     const lines = text.split('\n').filter(l => l.trim());
 
-    // For the FIRST file only: record audio_id order as they first appear (unique, in-order)
-    const recordOrder = (fi === 0);
-    const seenInThisFirstFile = new Set();
+    // Record order only if this file is ORDER_SOURCE
+    const recordOrder = file.toLowerCase() === orderSourceLower;
+    if (recordOrder) sawOrderSource = true;
+    const seenInOrderSource = new Set();
 
     for (const line of lines) {
         try {
@@ -161,15 +168,15 @@ async function loadAll() {
         modelsData[modelName].get(id).push(obj);
         allAudioIds.add(id);
 
-        if (recordOrder && !seenInThisFirstFile.has(id)) {
+        if (recordOrder && !seenInOrderSource.has(id)) {
             audioIdOrder.push(id);
-            seenInThisFirstFile.add(id);
+            seenInOrderSource.add(id);
         }
         } catch (e) {
         console.warn(`Skipping invalid JSON in ${file}:`, line);
         }
     }
-    // Ensure per-audio arrays are sorted
+    // Ensure per-audio arrays are sorted by target_id
     for (const [aid, arr] of modelsData[modelName]) {
         arr.sort((a,b) => a.target_id - b.target_id);
     }
@@ -180,12 +187,10 @@ async function loadAll() {
     return;
     }
 
-    // Use preserved order from the first file; if empty, fall back to sorted set
-    const orderedIds = audioIdOrder.length ? audioIdOrder : [...allAudioIds];
+    // Use ORDER_SOURCE order if we saw it; otherwise fall back to the set's iteration order
+    const orderedIds = (sawOrderSource && audioIdOrder.length) ? audioIdOrder : [...allAudioIds];
     renderAudioIdButtons(orderedIds);
-
-    // Default to first audio_id in preserved order
-    renderForAudioId(orderedIds[0]);
+    renderForAudioId(orderedIds[0]); // Default to first
 }
 
 // ---------- UI rendering ----------
@@ -262,13 +267,13 @@ function renderCandidatePanels(audioId, targetId, wordText) {
         return;
     }
 
+    // Show empty-string candidates as "NULL" (keep their probabilities)
     const candidates = Object.entries(entry.candidates || {})
-    .map(([cand, prob]) => {
+        .map(([cand, prob]) => {
         const token = (cand ?? '').trim() === '' ? 'NULL' : cand;
         return [token, prob];
-    })
-    .sort((a, b) => b[1] - a[1]);
-
+        })
+        .sort((a, b) => b[1] - a[1]);
 
     if (!candidates.length) {
         panel.innerHTML += `<div class="no-data">No candidate probabilities available.</div>`;
@@ -299,6 +304,7 @@ function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&l
 // Go!
 loadAll();
 </script>
+
     
 
 </body>
