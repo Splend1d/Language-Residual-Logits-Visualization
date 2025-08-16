@@ -44,13 +44,13 @@ Gigaspeech index3 POD1000000028_S0000030 position54 zmeskals
 
 Gigaspeech index4 POD1000000028_S0000030 position10 karolyi
 
-Gigaspeech index27 POD1000000028_S0000281 position19,20 geza pozsar
+Gigaspeech index29 POD1000000028_S0000281 position19,20 geza pozsar
 
-Gigaspeech index44 POD1000000028_S0000281 position16,17,18 hubert de givenchy
+Gigaspeech index44 YOU1000000148_S0000015 position16,17,18 hubert de givenchy
 
-Gigaspeech index48 POD1000000028_S0000281 position17 riley
+Gigaspeech index48 POD1000000019_S0000260 position17 riley
 
-Gigaspeech index48 POD1000000028_S0000281 position24 harper
+Gigaspeech index48 POD1000000019_S0000260 position24 harper
 
 Gigaspeech index71 POD1000000005_S0000194 position17 shirred
 
