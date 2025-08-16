@@ -54,7 +54,7 @@
   .candidate-bar {
     display: inline-block;
     height: 14px;
-    background: #4285f4; /* default blue; red when logscale */
+    background: #4285f4; /* default blue; red for logscale */
     vertical-align: middle;
     min-width: 1px;
   }
@@ -137,7 +137,7 @@ async function loadAll() {
 
   modelOrder = files.map(n => n.replace(/\.jsonl$/i, ''));
 
-  // Small console check for logscale detection
+  // Console check for logscale detection
   modelOrder.forEach(m => console.log(`[logscale?] ${m} ->`, /logscale/i.test(m)));
 
   const orderSourceLower = ORDER_SOURCE.toLowerCase();
@@ -201,7 +201,8 @@ function renderAudioIdButtons(ids) {
   ids.forEach((id, idx) => {
     const btn = document.createElement('button');
     btn.className = 'audio-id-btn';
-    btn.textContent = id;
+    // Show [index] AUDIO_ID
+    btn.textContent = `[${idx + 1}] ${id}`;
     if (idx === 0) btn.classList.add('selected');
     btn.onclick = () => {
       document.querySelectorAll('.audio-id-btn').forEach(b => b.classList.remove('selected'));
@@ -221,9 +222,15 @@ function renderForAudioId(audioId) {
   }
   const orderedTids = [...targetIds].sort((a,b)=>a-b);
 
-  // Build a single sentence: prefer the first model that has the token at that position
+  // Find the order index from audioIdOrder (or fallback)
+  const orderIndex = audioIdOrder.indexOf(audioId);
+  const displayIndex = orderIndex >= 0 ? orderIndex + 1 : '?';
+
+  // Header: [N] AUDIO_ID
   const sentenceDiv = document.getElementById('sentence');
-  sentenceDiv.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
+  sentenceDiv.innerHTML = `<strong>[${displayIndex}] ${audioId}</strong><br/>`;
+
+  // Build a single sentence: prefer the first model that has the token at that position
   orderedTids.forEach(tid => {
     let entry = null;
     for (const model of modelOrder) {
@@ -268,7 +275,7 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       return;
     }
 
-    // Treat filenames like: phi4-... .logscale.jsonl as logscale
+    // Detect logscale filenames like *.logscale.jsonl
     const isLogScale = /logscale/i.test(model);
 
     // Build pairs:
@@ -290,6 +297,7 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       return;
     }
 
+    // Sort by effective bar value
     pairs.sort((a, b) => b.barVal - a.barVal);
     const maxBar = pairs[0].barVal || 1;
 
@@ -300,7 +308,7 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       const bar = document.createElement('span');
       bar.className = 'candidate-bar';
       bar.style.width = `${Math.max(1, (barVal / maxBar) * 240)}px`;
-      if (isLogScale) bar.style.background = '#d93025'; // red when logscale
+      if (isLogScale) bar.style.background = '#d93025'; // red for logscale
       row.appendChild(bar);
 
       const txt = document.createElement('span');
@@ -329,3 +337,4 @@ loadAll();
 
 </body>
 </html>
+
