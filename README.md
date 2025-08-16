@@ -23,7 +23,9 @@ microsoft/Phi-4-multimodal-instruct Ablation No Lora: https://www.kaggle.com/cod
 LLM-based with `microsoft/Phi-4-multimodal-instruct` as target:
 
 microsoft/Phi-4-multimodal-instruct Ablation No Lora: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-from-phi4-phi4-no-lora
+
 microsoft/Phi-4-multimodal-instruct Ablation No Audio: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-from-phi4-phi4-no-audi
+
 nvidia/canary-qwen-2.5b:
 
 ## Analysis
