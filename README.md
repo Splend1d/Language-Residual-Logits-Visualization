@@ -26,5 +26,15 @@ microsoft/Phi-4-multimodal-instruct Ablation No Lora: https://www.kaggle.com/cod
 microsoft/Phi-4-multimodal-instruct Ablation No Audio: https://www.kaggle.com/code/a24998667/lrlv-get-next-word-logits-from-phi4-phi4-no-audi
 nvidia/canary-qwen-2.5b:
 
+## Analysis
+
+Gigaspeech index3 POD1000000028_S0000030 position10 roenigk
+
+Gigaspeech index3 POD1000000028_S0000030 position54 zmeskals
+
+
+
+
+
 
 
