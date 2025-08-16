@@ -54,7 +54,7 @@
   .candidate-bar {
     display: inline-block;
     height: 14px;
-    background: #4285f4;
+    background: #4285f4; /* default blue; overridden for logscale */
     vertical-align: middle;
     min-width: 1px;
   }
@@ -86,40 +86,40 @@ const ORDER_SOURCE = 'whisper-large-v3.jsonl';
 
 // Manifest fallback for custom domains or API limits: assets/manifest.json -> ["file1.jsonl","file2.jsonl"]
 async function listJsonlAssets() {
-    if (OWNER && REPO) {
+  if (OWNER && REPO) {
     try {
-        const api = `https://api.github.com/repos/${OWNER}/${REPO}/contents/assets`;
-        const r = await fetch(api);
-        if (r.ok) {
+      const api = `https://api.github.com/repos/${OWNER}/${REPO}/contents/assets`;
+      const r = await fetch(api);
+      if (r.ok) {
         const arr = await r.json();
         const files = arr
-            .filter(x => x.type === 'file' && /\.jsonl$/i.test(x.name))
-            .map(x => x.name)
-            .sort();
+          .filter(x => x.type === 'file' && /\.jsonl$/i.test(x.name))
+          .map(x => x.name)
+          .sort();
         if (files.length) return files;
-        }
+      }
     } catch (e) {
-        console.warn('GitHub API listing failed, will try manifest:', e);
+      console.warn('GitHub API listing failed, will try manifest:', e);
     }
-    }
-    try {
+  }
+  try {
     const m = await fetch('assets/manifest.json', { cache: 'no-store' });
     if (m.ok) {
-        const files = await m.json();
-        return (files || []).filter(n => /\.jsonl$/i.test(n)).sort();
+      const files = await m.json();
+      return (files || []).filter(n => /\.jsonl$/i.test(n)).sort();
     }
-    } catch (e) {
+  } catch (e) {
     console.warn('Manifest not found or invalid:', e);
-    }
-    return [];
+  }
+  return [];
 }
 
 // ---------- Data structures ----------
 /*
-    modelsData = {
+  modelsData = {
     "<modelName>": Map<audio_id, Array<entry>>
-    }
-    entry: { audio_id, target_id, target_text, candidates: {token: prob, ...}, ... }
+  }
+  entry: { audio_id, target_id, target_text, candidates: {token: prob, ...}, ... }
 */
 const modelsData = {};
 let modelOrder = []; // array of modelNames (from filenames sans .jsonl)
@@ -129,27 +129,27 @@ const audioIdOrder = [];
 
 // ---------- Load & parse ----------
 async function loadAll() {
-    const files = await listJsonlAssets();
-    if (!files.length) {
+  const files = await listJsonlAssets();
+  if (!files.length) {
     document.getElementById('sentence').textContent = 'No assets/*.jsonl files found.';
     return;
-    }
+  }
 
-    modelOrder = files.map(n => n.replace(/\.jsonl$/i, ''));
+  modelOrder = files.map(n => n.replace(/\.jsonl$/i, ''));
 
-    // Normalize for comparison
-    const orderSourceLower = ORDER_SOURCE.toLowerCase();
-    let sawOrderSource = false;
+  // Normalize for comparison
+  const orderSourceLower = ORDER_SOURCE.toLowerCase();
+  let sawOrderSource = false;
 
-    for (let fi = 0; fi < files.length; fi++) {
+  for (let fi = 0; fi < files.length; fi++) {
     const file = files[fi];
     const modelName = file.replace(/\.jsonl$/i, '');
     modelsData[modelName] = new Map();
 
     const res = await fetch(`assets/${file}`, { cache: 'no-store' });
     if (!res.ok) {
-        console.warn('Failed to fetch', file, res.status);
-        continue;
+      console.warn('Failed to fetch', file, res.status);
+      continue;
     }
     const text = await res.text();
     const lines = text.split('\n').filter(l => l.trim());
@@ -160,7 +160,7 @@ async function loadAll() {
     const seenInOrderSource = new Set();
 
     for (const line of lines) {
-        try {
+      try {
         const obj = JSON.parse(line);
         const id = obj.audio_id;
 
@@ -169,66 +169,66 @@ async function loadAll() {
         allAudioIds.add(id);
 
         if (recordOrder && !seenInOrderSource.has(id)) {
-            audioIdOrder.push(id);
-            seenInOrderSource.add(id);
+          audioIdOrder.push(id);
+          seenInOrderSource.add(id);
         }
-        } catch (e) {
+      } catch (e) {
         console.warn(`Skipping invalid JSON in ${file}:`, line);
-        }
+      }
     }
     // Ensure per-audio arrays are sorted by target_id
     for (const [aid, arr] of modelsData[modelName]) {
-        arr.sort((a,b) => a.target_id - b.target_id);
+      arr.sort((a,b) => a.target_id - b.target_id);
     }
-    }
+  }
 
-    if (!allAudioIds.size) {
+  if (!allAudioIds.size) {
     document.getElementById('sentence').textContent = 'No valid JSONL entries found.';
     return;
-    }
+  }
 
-    // Use ORDER_SOURCE order if we saw it; otherwise fall back to the set's iteration order
-    const orderedIds = (sawOrderSource && audioIdOrder.length) ? audioIdOrder : [...allAudioIds];
-    renderAudioIdButtons(orderedIds);
-    renderForAudioId(orderedIds[0]); // Default to first
+  // Use ORDER_SOURCE order if we saw it; otherwise fall back to the set's iteration order
+  const orderedIds = (sawOrderSource && audioIdOrder.length) ? audioIdOrder : [...allAudioIds];
+  renderAudioIdButtons(orderedIds);
+  renderForAudioId(orderedIds[0]); // Default to first
 }
 
 // ---------- UI rendering ----------
 function renderAudioIdButtons(ids) {
-    const box = document.getElementById('audioIdButtons');
-    box.innerHTML = '';
-    ids.forEach((id, idx) => {
+  const box = document.getElementById('audioIdButtons');
+  box.innerHTML = '';
+  ids.forEach((id, idx) => {
     const btn = document.createElement('button');
     btn.className = 'audio-id-btn';
     btn.textContent = id;
     if (idx === 0) btn.classList.add('selected');
     btn.onclick = () => {
-        document.querySelectorAll('.audio-id-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        renderForAudioId(id);
+      document.querySelectorAll('.audio-id-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      renderForAudioId(id);
     };
     box.appendChild(btn);
-    });
+  });
 }
 
 function renderForAudioId(audioId) {
-    // Build union of target_ids across all models for this audio_id
-    const targetIds = new Set();
-    for (const model of modelOrder) {
+  // Build union of target_ids across all models for this audio_id
+  const targetIds = new Set();
+  for (const model of modelOrder) {
     const arr = modelsData[model].get(audioId) || [];
     arr.forEach(e => targetIds.add(e.target_id));
-    }
-    const orderedTids = [...targetIds].sort((a,b)=>a-b);
+  }
+  const orderedTids = [...targetIds].sort((a,b)=>a-b);
 
-    // Build a single sentence: prefer the first model that has the token at that position
-    const sentenceDiv = document.getElementById('sentence');
-    sentenceDiv.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
-    orderedTids.forEach(tid => {
+  // Build a single sentence: prefer the first model that has the token at that position
+  const sentenceDiv = document.getElementById('sentence');
+  sentenceDiv.innerHTML = `<strong>Audio ID: ${audioId}</strong><br/>`;
+  orderedTids.forEach(tid => {
     let entry = null;
     for (const model of modelOrder) {
-        const arr = modelsData[model].get(audioId) || [];
-        const found = arr.find(e => e.target_id === tid);
-        if (found) { entry = found; break; }
+      const arr = modelsData[model].get(audioId) || [];
+      const found = arr.find(e => e.target_id === tid);
+      if (found) { entry = found; break; }
     }
     if (!entry) return;
     const span = document.createElement('span');
@@ -236,76 +236,99 @@ function renderForAudioId(audioId) {
     span.textContent = (entry.target_text || '') + ' ';
     span.title = `Click to compare candidates for "${(entry.target_text||'').trim()}"`;
     span.onclick = () => {
-        document.querySelectorAll('#sentence .word').forEach(w => w.classList.remove('selected'));
-        span.classList.add('selected');
-        renderCandidatePanels(audioId, tid, (entry.target_text || '').trim());
+      document.querySelectorAll('#sentence .word').forEach(w => w.classList.remove('selected'));
+      span.classList.add('selected');
+      renderCandidatePanels(audioId, tid, (entry.target_text || '').trim());
     };
     sentenceDiv.appendChild(span);
-    });
+  });
 
-    // Clear panels until a word is clicked
-    const panels = document.getElementById('panels');
-    panels.innerHTML = '';
-    modelOrder.forEach(model => {
+  // Clear panels until a word is clicked
+  const panels = document.getElementById('panels');
+  panels.innerHTML = '';
+  modelOrder.forEach(model => {
     const p = document.createElement('div');
     p.className = 'panel';
     p.id = `panel-${cssSafe(model)}`;
     p.innerHTML = `<h3>${model}.jsonl</h3><div class="no-data">Click a word above to see candidates.</div>`;
     panels.appendChild(p);
-    });
+  });
 }
 
 function renderCandidatePanels(audioId, targetId, wordText) {
-    modelOrder.forEach(model => {
+  modelOrder.forEach(model => {
     const arr = modelsData[model].get(audioId) || [];
     const entry = arr.find(e => e.target_id === targetId);
     const panel = document.getElementById(`panel-${cssSafe(model)}`);
     panel.innerHTML = `<h3>${model}.jsonl — Candidates for word "<em>${escapeHtml(wordText)}</em>" (position ${targetId})</h3>`;
 
     if (!entry) {
-        panel.innerHTML += `<div class="no-data">No data for this word.</div>`;
-        return;
+      panel.innerHTML += `<div class="no-data">No data for this word.</div>`;
+      return;
     }
 
-    // Show empty-string candidates as "NULL" (keep their probabilities)
-    const candidates = Object.entries(entry.candidates || {})
-        .map(([cand, prob]) => {
-        const token = (cand ?? '').trim() === '' ? 'NULL' : cand;
-        return [token, prob];
-        })
-        .sort((a, b) => b[1] - a[1]);
+    const isLogScale = /logscale/i.test(model);
 
-    if (!candidates.length) {
-        panel.innerHTML += `<div class="no-data">No candidate probabilities available.</div>`;
-        return;
+    // Build candidates; treat empty/whitespace as "NULL"
+    const rawPairs = Object.entries(entry.candidates || {}).map(([cand, val]) => {
+      const token = (cand ?? '').trim() === '' ? 'NULL' : cand;
+      const raw = Number(val);
+      const barVal = isFinite(raw) ? (isLogScale ? Math.pow(10, raw) : raw) : 0;
+      return { token, raw, barVal };
+    });
+
+    if (!rawPairs.length) {
+      panel.innerHTML += `<div class="no-data">No candidate probabilities available.</div>`;
+      return;
     }
 
-    const maxProb = candidates[0][1] || 1;
-    candidates.forEach(([token, prob]) => {
-        const row = document.createElement('div');
-        row.className = 'candidate';
-        const bar = document.createElement('span');
-        bar.className = 'candidate-bar';
-        bar.style.width = `${Math.max(1, (prob / maxProb) * 240)}px`;
-        row.appendChild(bar);
-        const txt = document.createElement('span');
-        txt.className = 'candidate-text';
-        txt.textContent = `${token} : ${(prob * 100).toFixed(2)}%`;
-        row.appendChild(txt);
-        panel.appendChild(row);
+    // Sort by bar value (i.e., actual probability mass for logscale, raw prob otherwise)
+    rawPairs.sort((a, b) => b.barVal - a.barVal);
+
+    const maxBar = rawPairs[0].barVal || 1;
+
+    rawPairs.forEach(({ token, raw, barVal }) => {
+      const row = document.createElement('div');
+      row.className = 'candidate';
+
+      const bar = document.createElement('span');
+      bar.className = 'candidate-bar';
+      // color: red for logscale, default blue otherwise
+      if (isLogScale) bar.style.background = '#d93025';
+      bar.style.width = `${Math.max(1, (barVal / maxBar) * 240)}px`;
+      row.appendChild(bar);
+
+      const txt = document.createElement('span');
+      txt.className = 'candidate-text';
+      // Text: original numbers for logscale; percentage for normal
+      if (isLogScale) {
+        txt.textContent = `${token} : ${formatNumber(raw)}`; // show original log number
+      } else {
+        txt.textContent = `${token} : ${(barVal * 100).toFixed(2)}%`;
+      }
+      row.appendChild(txt);
+
+      panel.appendChild(row);
     });
-    });
+  });
 }
 
 // ---------- utils ----------
 function cssSafe(s) { return s.replace(/[^a-z0-9_-]/gi, '_'); }
 function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function formatNumber(n) {
+  // Compact but faithful display for logs (keeps negatives & decimals nicely)
+  if (!isFinite(n)) return String(n);
+  // Use up to 6 significant digits, trim trailing zeros
+  let s = Number(n).toPrecision(6);
+  if (s.includes('e')) return s;
+  s = s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
+  return s;
+}
 
 // Go!
 loadAll();
 </script>
-
-    
 
 </body>
 </html>
