@@ -23,7 +23,7 @@
 
   #sentence {
     margin: 10px 0 20px;
-    font-size: 1.5rem; /* larger font */
+    font-size: 1.5rem;
     line-height: 1.8rem;
     word-wrap: break-word;
   }
@@ -54,7 +54,7 @@
   .candidate-bar {
     display: inline-block;
     height: 14px;
-    background: #4285f4; /* default blue; overridden for logscale */
+    background: #4285f4; /* default blue; red when logscale */
     vertical-align: middle;
     min-width: 1px;
   }
@@ -119,7 +119,7 @@ async function listJsonlAssets() {
   modelsData = {
     "<modelName>": Map<audio_id, Array<entry>>
   }
-  entry: { audio_id, target_id, target_text, candidates: {token: prob, ...}, ... }
+  entry: { audio_id, target_id, target_text, candidates: {token: probOrLog, ...}, ... }
 */
 const modelsData = {};
 let modelOrder = []; // array of modelNames (from filenames sans .jsonl)
@@ -137,7 +137,9 @@ async function loadAll() {
 
   modelOrder = files.map(n => n.replace(/\.jsonl$/i, ''));
 
-  // Normalize for comparison
+  // Small console check for logscale detection
+  modelOrder.forEach(m => console.log(`[logscale?] ${m} ->`, /logscale/i.test(m)));
+
   const orderSourceLower = ORDER_SOURCE.toLowerCase();
   let sawOrderSource = false;
 
@@ -187,7 +189,6 @@ async function loadAll() {
     return;
   }
 
-  // Use ORDER_SOURCE order if we saw it; otherwise fall back to the set's iteration order
   const orderedIds = (sawOrderSource && audioIdOrder.length) ? audioIdOrder : [...allAudioIds];
   renderAudioIdButtons(orderedIds);
   renderForAudioId(orderedIds[0]); // Default to first
@@ -267,44 +268,49 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       return;
     }
 
+    // Treat filenames like: phi4-... .logscale.jsonl as logscale
     const isLogScale = /logscale/i.test(model);
 
-    // Build candidates; treat empty/whitespace as "NULL"
-    const rawPairs = Object.entries(entry.candidates || {}).map(([cand, val]) => {
+    // Build pairs:
+    // - token: "NULL" if empty/whitespace token
+    // - rawString: EXACT JSONL text value (no reformatting)
+    // - barVal:   for logscale => 10^(value), else => value
+    const pairs = Object.entries(entry.candidates || {}).map(([cand, val]) => {
       const token = (cand ?? '').trim() === '' ? 'NULL' : cand;
-      const raw = Number(val);
-      const barVal = isFinite(raw) ? (isLogScale ? Math.pow(10, raw) : raw) : 0;
-      return { token, raw, barVal };
+      const rawString = String(val);
+      const numeric = Number(val);
+      const barVal = isFinite(numeric)
+        ? (isLogScale ? Math.pow(10, numeric) : numeric)
+        : 0;
+      return { token, rawString, barVal };
     });
 
-    if (!rawPairs.length) {
+    if (!pairs.length) {
       panel.innerHTML += `<div class="no-data">No candidate probabilities available.</div>`;
       return;
     }
 
-    // Sort by bar value (i.e., actual probability mass for logscale, raw prob otherwise)
-    rawPairs.sort((a, b) => b.barVal - a.barVal);
+    pairs.sort((a, b) => b.barVal - a.barVal);
+    const maxBar = pairs[0].barVal || 1;
 
-    const maxBar = rawPairs[0].barVal || 1;
-
-    rawPairs.forEach(({ token, raw, barVal }) => {
+    pairs.forEach(({ token, rawString, barVal }) => {
       const row = document.createElement('div');
       row.className = 'candidate';
 
       const bar = document.createElement('span');
       bar.className = 'candidate-bar';
-      // color: red for logscale, default blue otherwise
-      if (isLogScale) bar.style.background = '#d93025';
       bar.style.width = `${Math.max(1, (barVal / maxBar) * 240)}px`;
+      if (isLogScale) bar.style.background = '#d93025'; // red when logscale
       row.appendChild(bar);
 
       const txt = document.createElement('span');
       txt.className = 'candidate-text';
-      // Text: original numbers for logscale; percentage for normal
       if (isLogScale) {
-        txt.textContent = `${token} : ${formatNumber(raw)}`; // show original log number
+        // EXACT original number from JSONL (e.g., "-15.911656963198604")
+        txt.textContent = `${token} : ${rawString}`;
       } else {
-        txt.textContent = `${token} : ${(barVal * 100).toFixed(2)}%`;
+        const pct = isFinite(barVal) ? (barVal * 100).toFixed(2) : 'NaN';
+        txt.textContent = `${token} : ${pct}%`;
       }
       row.appendChild(txt);
 
@@ -316,15 +322,6 @@ function renderCandidatePanels(audioId, targetId, wordText) {
 // ---------- utils ----------
 function cssSafe(s) { return s.replace(/[^a-z0-9_-]/gi, '_'); }
 function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function formatNumber(n) {
-  // Compact but faithful display for logs (keeps negatives & decimals nicely)
-  if (!isFinite(n)) return String(n);
-  // Use up to 6 significant digits, trim trailing zeros
-  let s = Number(n).toPrecision(6);
-  if (s.includes('e')) return s;
-  s = s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
-  return s;
-}
 
 // Go!
 loadAll();
