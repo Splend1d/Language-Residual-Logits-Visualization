@@ -1,8 +1,8 @@
 import json
 import math
 
-input_path = "assets/phi4-multimodal-noaudio-from-phi4-multimodal.jsonl"           # <- change this
-output_path = "assets/phi4-multimodal-noaudio-from-phi4-multimodal.logscale.jsonl"  # <- change this
+input_path = "assets/phi4-multimodal-nolora-from-phi4-multimodal.jsonl"           # <- change this
+output_path = "assets/phi4-multimodal-nolora-from-phi4-multimodal.logscale.jsonl"  # <- change this
 
 def log_or_neg_inf(p):
     # Convert probability to log scale; handle zeros safely
