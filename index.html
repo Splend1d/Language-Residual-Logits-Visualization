@@ -21,6 +21,29 @@
   }
   .audio-id-btn.selected { background: #4285f4; color: #fff; }
 
+  #controls {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 10px 0 16px;
+  }
+  #controls h3 { margin: 0 0 8px; color: #1a73e8; font-size: 1rem; }
+  .models { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid #ddd; border-radius: 999px; padding: 6px 10px;
+    background: #fafafa; font-size: 0.95rem;
+  }
+  .controls-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-mini {
+    border: 1px solid #bbb; border-radius: 8px; padding: 4px 8px; background: #fff; cursor: pointer;
+  }
+  .muted { color: #666; font-size: 0.9rem; }
+  .badge {
+    margin-left: 6px; font-size: 0.75rem; padding: 2px 6px;
+    border-radius: 999px; border: 1px solid #eee; background: #f5f5f5; color: #555;
+  }
+
   #sentence {
     margin: 10px 0 20px;
     font-size: 1.5rem;
@@ -60,7 +83,7 @@
   }
   .candidate-text { margin-left: 6px; vertical-align: middle; }
   .no-data { font-style: italic; color: #888; }
-  .muted { color: #666; font-size: 0.9rem; }
+  .hint { color: #b23b3b; font-size: 0.95rem; }
 </style>
 </head>
 <body>
@@ -69,6 +92,8 @@
 <div class="muted">Auto-detects all <code>assets/*.jsonl</code> and compares them side-by-side.</div>
 
 <div id="audioIdButtons"></div>
+
+<div id="controls"></div>
 
 <div id="sentence">Loading model list…</div>
 
@@ -122,10 +147,14 @@ async function listJsonlAssets() {
   entry: { audio_id, target_id, target_text, candidates: {token: probOrLog, ...}, ... }
 */
 const modelsData = {};
-let modelOrder = []; // array of modelNames (from filenames sans .jsonl)
+let modelOrder = []; // filenames sans .jsonl
 let allAudioIds = new Set();
-// Preserve the appearance order of audio IDs from ORDER_SOURCE
 const audioIdOrder = [];
+
+// Selection state
+const activeModels = new Set(); // user-checked files (by modelName)
+let currentAudioId = null;
+let currentSelection = { targetId: null, wordText: '' };
 
 // ---------- Load & parse ----------
 async function loadAll() {
@@ -136,15 +165,12 @@ async function loadAll() {
   }
 
   modelOrder = files.map(n => n.replace(/\.jsonl$/i, ''));
-
-  // Console check for logscale detection
-  modelOrder.forEach(m => console.log(`[logscale?] ${m} ->`, /logscale/i.test(m)));
+  modelOrder.forEach(m => activeModels.add(m)); // default: all checked
 
   const orderSourceLower = ORDER_SOURCE.toLowerCase();
   let sawOrderSource = false;
 
-  for (let fi = 0; fi < files.length; fi++) {
-    const file = files[fi];
+  for (const file of files) {
     const modelName = file.replace(/\.jsonl$/i, '');
     modelsData[modelName] = new Map();
 
@@ -156,7 +182,6 @@ async function loadAll() {
     const text = await res.text();
     const lines = text.split('\n').filter(l => l.trim());
 
-    // Record order only if this file is ORDER_SOURCE
     const recordOrder = file.toLowerCase() === orderSourceLower;
     if (recordOrder) sawOrderSource = true;
     const seenInOrderSource = new Set();
@@ -178,7 +203,6 @@ async function loadAll() {
         console.warn(`Skipping invalid JSON in ${file}:`, line);
       }
     }
-    // Ensure per-audio arrays are sorted by target_id
     for (const [aid, arr] of modelsData[modelName]) {
       arr.sort((a,b) => a.target_id - b.target_id);
     }
@@ -189,9 +213,87 @@ async function loadAll() {
     return;
   }
 
+  renderControls();
+
   const orderedIds = (sawOrderSource && audioIdOrder.length) ? audioIdOrder : [...allAudioIds];
   renderAudioIdButtons(orderedIds);
-  renderForAudioId(orderedIds[0]); // Default to first
+  renderForAudioId(orderedIds[0]); // default to first
+}
+
+// ---------- Controls (one checkbox per file) ----------
+function renderControls() {
+  const box = document.getElementById('controls');
+  box.innerHTML = `
+    <h3>Select files to display</h3>
+    <div class="models" id="modelChecks"></div>
+    <div class="controls-actions">
+      <button class="btn-mini" id="btnAll">Select all</button>
+      <button class="btn-mini" id="btnNone">Deselect all</button>
+      <span class="muted" id="selCount"></span>
+    </div>
+  `;
+
+  const list = document.getElementById('modelChecks');
+  list.innerHTML = '';
+  modelOrder.forEach(model => {
+    const id = `mdl_${cssSafe(model)}`;
+    const isLog = /logscale/i.test(model);
+    const pill = document.createElement('label');
+    pill.className = 'pill';
+    pill.innerHTML = `
+      <input type="checkbox" id="${id}" data-model="${escapeHtml(model)}" ${activeModels.has(model) ? 'checked' : ''} />
+      ${model}.jsonl
+      ${isLog ? '<span class="badge">logscale</span>' : ''}
+    `;
+    list.appendChild(pill);
+
+    document.getElementById(id).addEventListener('change', (e) => {
+      const name = e.target.getAttribute('data-model');
+      if (e.target.checked) activeModels.add(name);
+      else activeModels.delete(name);
+      updateSelCount();
+      refreshPanelsKeepingSelection();
+    });
+  });
+
+  document.getElementById('btnAll').addEventListener('click', () => {
+    modelOrder.forEach(m => activeModels.add(m));
+    document.querySelectorAll('#modelChecks input[type="checkbox"]').forEach(cb => cb.checked = true);
+    updateSelCount();
+    refreshPanelsKeepingSelection();
+  });
+  document.getElementById('btnNone').addEventListener('click', () => {
+    activeModels.clear();
+    document.querySelectorAll('#modelChecks input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateSelCount();
+    refreshPanelsKeepingSelection();
+  });
+
+  updateSelCount();
+}
+
+function updateSelCount() {
+  const el = document.getElementById('selCount');
+  el.textContent = `${activeModels.size} / ${modelOrder.length} selected`;
+}
+
+// Visible subset based only on checkboxes
+function getVisibleModels() {
+  return modelOrder.filter(m => activeModels.has(m));
+}
+
+// Keep selection when filters change
+function refreshPanelsKeepingSelection() {
+  if (!currentAudioId) return;
+  const prev = { ...currentSelection };
+  renderForAudioId(currentAudioId);
+  if (prev.targetId != null) {
+    const wordEl = document.querySelector(`#sentence .word[data-tid="${prev.targetId}"]`);
+    if (wordEl) {
+      wordEl.classList.add('selected');
+      renderCandidatePanels(currentAudioId, Number(prev.targetId), prev.wordText || wordEl.textContent.trim());
+    }
+  }
 }
 
 // ---------- UI rendering ----------
@@ -201,7 +303,6 @@ function renderAudioIdButtons(ids) {
   ids.forEach((id, idx) => {
     const btn = document.createElement('button');
     btn.className = 'audio-id-btn';
-    // Show [index] AUDIO_ID
     btn.textContent = `[${idx + 1}] ${id}`;
     if (idx === 0) btn.classList.add('selected');
     btn.onclick = () => {
@@ -214,7 +315,9 @@ function renderAudioIdButtons(ids) {
 }
 
 function renderForAudioId(audioId) {
-  // Build union of target_ids across all models for this audio_id
+  currentAudioId = audioId;
+  currentSelection = { targetId: null, wordText: '' };
+
   const targetIds = new Set();
   for (const model of modelOrder) {
     const arr = modelsData[model].get(audioId) || [];
@@ -222,15 +325,12 @@ function renderForAudioId(audioId) {
   }
   const orderedTids = [...targetIds].sort((a,b)=>a-b);
 
-  // Find the order index from audioIdOrder (or fallback)
   const orderIndex = audioIdOrder.indexOf(audioId);
   const displayIndex = orderIndex >= 0 ? orderIndex + 1 : '?';
 
-  // Header: [N] AUDIO_ID
   const sentenceDiv = document.getElementById('sentence');
   sentenceDiv.innerHTML = `<strong>[${displayIndex}] ${audioId}</strong><br/>`;
 
-  // Build a single sentence: prefer the first model that has the token at that position
   orderedTids.forEach(tid => {
     let entry = null;
     for (const model of modelOrder) {
@@ -241,20 +341,31 @@ function renderForAudioId(audioId) {
     if (!entry) return;
     const span = document.createElement('span');
     span.className = 'word';
+    span.dataset.tid = String(tid);
     span.textContent = (entry.target_text || '') + ' ';
     span.title = `Click to compare candidates for "${(entry.target_text||'').trim()}"`;
     span.onclick = () => {
       document.querySelectorAll('#sentence .word').forEach(w => w.classList.remove('selected'));
       span.classList.add('selected');
+      currentSelection = { targetId: tid, wordText: (entry.target_text || '').trim() };
       renderCandidatePanels(audioId, tid, (entry.target_text || '').trim());
     };
     sentenceDiv.appendChild(span);
   });
 
-  // Clear panels until a word is clicked
   const panels = document.getElementById('panels');
   panels.innerHTML = '';
-  modelOrder.forEach(model => {
+  const visible = getVisibleModels();
+
+  if (!visible.length) {
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = 'No files selected. Check some boxes above.';
+    panels.appendChild(hint);
+    return;
+  }
+
+  visible.forEach(model => {
     const p = document.createElement('div');
     p.className = 'panel';
     p.id = `panel-${cssSafe(model)}`;
@@ -264,10 +375,15 @@ function renderForAudioId(audioId) {
 }
 
 function renderCandidatePanels(audioId, targetId, wordText) {
-  modelOrder.forEach(model => {
+  const visible = getVisibleModels();
+  if (!visible.length) return;
+
+  visible.forEach(model => {
     const arr = modelsData[model].get(audioId) || [];
     const entry = arr.find(e => e.target_id === targetId);
     const panel = document.getElementById(`panel-${cssSafe(model)}`);
+    if (!panel) return;
+
     panel.innerHTML = `<h3>${model}.jsonl — Candidates for word "<em>${escapeHtml(wordText)}</em>" (position ${targetId})</h3>`;
 
     if (!entry) {
@@ -275,13 +391,8 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       return;
     }
 
-    // Detect logscale filenames like *.logscale.jsonl
     const isLogScale = /logscale/i.test(model);
 
-    // Build pairs:
-    // - token: "NULL" if empty/whitespace token
-    // - rawString: EXACT JSONL text value (no reformatting)
-    // - barVal:   for logscale => 10^(value), else => value
     const pairs = Object.entries(entry.candidates || {}).map(([cand, val]) => {
       const token = (cand ?? '').trim() === '' ? 'NULL' : cand;
       const rawString = String(val);
@@ -297,7 +408,6 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       return;
     }
 
-    // Sort by effective bar value
     pairs.sort((a, b) => b.barVal - a.barVal);
     const maxBar = pairs[0].barVal || 1;
 
@@ -314,8 +424,7 @@ function renderCandidatePanels(audioId, targetId, wordText) {
       const txt = document.createElement('span');
       txt.className = 'candidate-text';
       if (isLogScale) {
-        // EXACT original number from JSONL (e.g., "-15.911656963198604")
-        txt.textContent = `${token} : ${rawString}`;
+        txt.textContent = `${token} : ${rawString}`; // exact log value
       } else {
         const pct = isFinite(barVal) ? (barVal * 100).toFixed(2) : 'NaN';
         txt.textContent = `${token} : ${pct}%`;
@@ -337,4 +446,3 @@ loadAll();
 
 </body>
 </html>
-
