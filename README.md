@@ -38,6 +38,8 @@ microsoft/Phi-4-multimodal-instruct Ablation No Audio: https://www.kaggle.com/co
 
 ## Analysis
 
+Positive Example:
+
 Gigaspeech index4 POD1000000028_S0000030 position10 roenigk
 
 Gigaspeech index4 POD1000000028_S0000030 position54 zmeskals
@@ -60,7 +62,15 @@ Gigaspeech index89 YOU1000000141_S0000140 throwing johnson (accented)
 
 Gigaspeech index93 POD1000000041_S0000549 nnamdi asomugha Sylvie's Love
 
+---
 
+Negative Example:
+
+Gigaspeech index3 POD1000000028_S0000030 position for 
+
+Gigaspeech index3 POD1000000028_S0000030 position podcasts
+
+Gigaspeech index36 jeannie
 
 
 
